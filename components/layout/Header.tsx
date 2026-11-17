@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -20,19 +20,39 @@ import { Language, UserRole } from '@/lib/types';
 import { AppStore } from '@/lib/store';
 import { BrandLogoMark, FlagIcon } from '@/components/ui/Icons';
 
+const LANGUAGE_OPTIONS: { code: Language; label: string; native: string }[] = [
+  { code: 'ru', label: 'RU', native: 'Русский' },
+  { code: 'tr', label: 'TR', native: 'Türkçe' },
+  { code: 'kk', label: 'KK', native: 'Қазақша' },
+];
+
 export function Header() {
   const { language, setLanguage, t } = useTranslation();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(AppStore.getCurrentUser());
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [mobileLangOpen, setMobileLangOpen] = useState(false);
+
+  const controlsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleUserChange = () => {
       setCurrentUser(AppStore.getCurrentUser());
     };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (controlsRef.current && !controlsRef.current.contains(e.target as Node)) {
+        setRoleDropdownOpen(false);
+        setLangDropdownOpen(false);
+      }
+    };
     window.addEventListener('tb_user_change', handleUserChange);
-    return () => window.removeEventListener('tb_user_change', handleUserChange);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('tb_user_change', handleUserChange);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleRoleChange = (role: UserRole) => {
@@ -42,6 +62,12 @@ export function Header() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('tb_user_change'));
     }
+  };
+
+  const handleLanguageSelect = (lang: Language) => {
+    setLanguage(lang);
+    setLangDropdownOpen(false);
+    setMobileLangOpen(false);
   };
 
   const navLinks: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -85,6 +111,7 @@ export function Header() {
   };
 
   const activeRole = roleLabels[currentUser.role] || roleLabels.buyer;
+  const activeLangMeta = LANGUAGE_OPTIONS.find((l) => l.code === language) || LANGUAGE_OPTIONS[0];
 
   return (
     <header className="sticky top-0 z-50 bg-[#F7F6F2]/85 backdrop-blur-xl border-b border-stone-200/80">
@@ -130,8 +157,8 @@ export function Header() {
             })}
           </nav>
 
-          {/* Right Controls: Compact FX + Language + Role */}
-          <div className="hidden sm:flex items-center gap-2">
+          {/* Right Controls: Compact FX + Language Dropdown + Role Dropdown */}
+          <div ref={controlsRef} className="hidden sm:flex items-center gap-2 shrink-0">
             {/* Compact Escrow + FX Chip */}
             <div
               className="hidden xl:flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-full border border-stone-200/80 text-[11px] font-mono tabular-nums text-stone-600 shadow-2xs"
@@ -142,38 +169,63 @@ export function Header() {
               <strong className="text-[#0F172A]">502.50 ₸</strong>
             </div>
 
-            {/* Language Segmented Pill */}
-            <div className="flex items-center bg-white p-0.5 rounded-full border border-stone-200/80 text-[11px] font-bold shadow-2xs">
-              {(['ru', 'tr', 'kk'] as Language[]).map((lng) => {
-                const isSelected = language === lng;
-                return (
-                  <button
-                    key={lng}
-                    onClick={() => setLanguage(lng)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-full uppercase transition-all ${
-                      isSelected
-                        ? 'bg-[#0F172A] text-white'
-                        : 'text-stone-500 hover:text-[#0F172A]'
-                    }`}
-                    title={lng === 'ru' ? 'Русский' : lng === 'tr' ? 'Türkçe' : 'Қазақша'}
-                  >
-                    <FlagIcon lang={lng} className="w-3.5 h-3.5" />
-                    <span>{lng}</span>
-                  </button>
-                );
-              })}
+            {/* Compact Language Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setLangDropdownOpen(!langDropdownOpen);
+                  setRoleDropdownOpen(false);
+                }}
+                className="flex items-center gap-1.5 bg-white hover:bg-stone-50 px-2.5 py-1.5 rounded-full border border-stone-200/90 text-xs font-bold text-[#0F172A] shadow-2xs transition-all"
+                title="Выбор языка"
+              >
+                <FlagIcon lang={language} className="w-3.5 h-3.5" />
+                <span>{activeLangMeta.label}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-stone-400 transition-transform ${langDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {langDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-44 bg-white rounded-2xl shadow-elevated border border-stone-200/90 py-1.5 z-50 text-xs">
+                  <div className="px-3.5 py-1.5 text-[10px] uppercase tracking-wider font-bold text-stone-400 border-b border-stone-100">
+                    Язык интерфейса
+                  </div>
+                  {LANGUAGE_OPTIONS.map((opt) => {
+                    const active = language === opt.code;
+                    return (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        onClick={() => handleLanguageSelect(opt.code)}
+                        className={`w-full text-left px-3.5 py-2 flex items-center justify-between transition-colors ${
+                          active ? 'bg-stone-50 font-bold text-[#0F172A]' : 'text-stone-700 hover:bg-stone-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FlagIcon lang={opt.code} className="w-4 h-4" />
+                          <span>{opt.native}</span>
+                        </div>
+                        {active && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Role Dropdown */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
+                onClick={() => {
+                  setRoleDropdownOpen(!roleDropdownOpen);
+                  setLangDropdownOpen(false);
+                }}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all shadow-2xs hover:shadow-xs ${activeRole.pill}`}
               >
                 <span className={`w-2 h-2 rounded-full ${activeRole.dot}`} />
                 <span>{activeRole.title}</span>
-                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                <ChevronDown className={`w-3.5 h-3.5 opacity-60 transition-transform ${roleDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {roleDropdownOpen && (
@@ -225,8 +277,41 @@ export function Header() {
             </div>
           </div>
 
-          {/* Mobile Menu Toggle */}
+          {/* Mobile Controls: Compact Language Dropdown + Hamburger */}
           <div className="flex md:hidden items-center gap-2">
+            <div className="relative sm:hidden">
+              <button
+                type="button"
+                onClick={() => setMobileLangOpen(!mobileLangOpen)}
+                className="flex items-center gap-1 bg-white px-2.5 py-2 rounded-xl border border-stone-200 text-xs font-bold text-[#0F172A]"
+              >
+                <FlagIcon lang={language} className="w-3.5 h-3.5" />
+                <span>{activeLangMeta.label}</span>
+                <ChevronDown className="w-3 h-3 text-stone-400" />
+              </button>
+
+              {mobileLangOpen && (
+                <div className="absolute right-0 mt-1.5 w-40 bg-white rounded-xl shadow-elevated border border-stone-200 py-1 z-50 text-xs">
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.code}
+                      type="button"
+                      onClick={() => handleLanguageSelect(opt.code)}
+                      className={`w-full text-left px-3 py-2 flex items-center justify-between ${
+                        language === opt.code ? 'bg-stone-50 font-bold text-[#0F172A]' : 'text-stone-700'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <FlagIcon lang={opt.code} className="w-3.5 h-3.5" />
+                        <span>{opt.native}</span>
+                      </span>
+                      {language === opt.code && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-xl bg-white border border-stone-200 text-stone-700 hover:text-[#0F172A]"
@@ -260,20 +345,17 @@ export function Header() {
 
           <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
             <span className="text-xs font-semibold text-stone-500">Язык:</span>
-            <div className="flex gap-1.5 text-xs font-bold">
-              {(['ru', 'tr', 'kk'] as Language[]).map((lng) => (
-                <button
-                  key={lng}
-                  onClick={() => setLanguage(lng)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg uppercase ${
-                    language === lng ? 'bg-[#0F172A] text-white' : 'bg-stone-100 text-stone-600'
-                  }`}
-                >
-                  <FlagIcon lang={lng} className="w-3.5 h-3.5" />
-                  <span>{lng}</span>
-                </button>
+            <select
+              value={language}
+              onChange={(e) => handleLanguageSelect(e.target.value as Language)}
+              className="px-3 py-1.5 rounded-xl border border-stone-200 bg-[#F7F6F2] text-xs font-bold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              {LANGUAGE_OPTIONS.map((opt) => (
+                <option key={opt.code} value={opt.code}>
+                  {opt.native} ({opt.label})
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
           <div className="pt-2">
